@@ -7,7 +7,7 @@
     "see": "bin/see"
   },
   "scripts": {
-    "test": "echo 'jest'",
+    "test": "bin/see test/file.html",
     "lint": "eslint `git diff origin/master..HEAD --name-only -- '*.js'`",
     "lint:all": "eslint . --ignore-path .gitignore"
   },
