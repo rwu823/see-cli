@@ -1,0 +1,39 @@
+{
+  "name": "see-cli",
+  "version": "0.0.1",
+  "description": "A colorful 🌈 cat - syntax highlight print CLI",
+  "main": "index.js",
+  "bin": {
+    "see": "bin/see"
+  },
+  "scripts": {
+    "test": "echo 'jest'",
+    "lint": "eslint `git diff origin/master..HEAD --name-only -- '*.js'`",
+    "lint:all": "eslint . --ignore-path .gitignore"
+  },
+  "keywords": [
+    "cli",
+    "syntax",
+    "cat",
+    "highlight",
+    "colorful",
+    "print"
+  ],
+  "author": "Rocky Wu <rwu823@gmail.com>",
+  "license": "MIT",
+  "dependencies": {
+    "chalk": "^2.4.1",
+    "cli-highlight": "^2.0.0",
+    "isbinaryfile": "^3.0.2",
+    "meow": "^5.0.0"
+  },
+  "devDependencies": {
+    "@rwu823/base": "github:rwu823/base"
+  },
+  "lint-staged": {
+    "*.{js,jsx,css,md}": [
+      "prettier --write --parser babylon",
+      "git add"
+    ]
+  }
+}

@@ -1,0 +1,131 @@
+version: 2
+
+vars:
+  init: &init
+    environment:
+        TZ: 'Asia/Taipei'
+    docker:
+      - image: circleci/node
+
+  save_node_modules:  &save_node_modules
+    save_cache:
+      key: node_modules#{{ checksum "package-lock.json" }}
+      paths:
+        - node_modules
+
+  restore_node_modules:  &restore_node_modules
+    restore_cache:
+      key: node_modules#{{ checksum "package-lock.json" }}
+
+  branch_not_deploy: &branch_not_deploy
+    filters:
+      branches:
+        ignore:
+          - master
+
+  branch_is_deploy: &branch_is_deploy
+    filters:
+      branches:
+        only:
+          - master
+
+  setup_docker: &setup_docker
+    setup_remote_docker:
+      docker_layer_caching: true
+
+  setup_npm: &setup_npm
+    run:
+      name: Setup NPM
+      command: echo "//registry.npmjs.org/:_authToken=$NPM_TOKEN" >> ~/.npmrc
+
+  set_env: &set_env
+    run:
+      name: Set Env
+      command: |
+        echo 'export IMAGE=$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME:$CIRCLE_SHA1' >> $BASH_ENV
+        source $BASH_ENV
+
+        echo $IMAGE
+
+  docker_build: &docker_build
+    run:
+      name: Docker build
+      command: |
+        docker build . -t $IMAGE
+        docker images $IMAGE
+        docker history $IMAGE
+
+  setup_gcloud: &setup_gcloud
+    run:
+      name: Setup GCloud
+      command: |
+        export GCLOUD_SDK_VERSION=204
+        export GCLOUD_PROJECT=gcp-project-id
+        curl https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cloud-sdk-$GCLOUD_SDK_VERSION.0.0-linux-x86_64.tar.gz -o ./gcloud-sdk.tar.gz
+        tar xzf gcloud-sdk.tar.gz -C ~
+        rm gcloud-sdk.tar.gz
+        export PATH=~/google-cloud-sdk/bin:$PATH
+        echo $GCLOUD_KEY | base64 --decode > ~/gcloud.key.json
+        gcloud components install kubectl
+        gcloud auth activate-service-account --key-file ~/gcloud.key.json
+        gcloud config set project $GCLOUD_PROJECT
+        gcloud container clusters get-credentials event-k8s --zone asia-northeast1-a
+
+        echo 'export IMAGE=gcr.io/$GCLOUD_PROJECT/www:$CIRCLE_SHA1' >> $BASH_ENV
+        echo 'export PATH=~/google-cloud-sdk/bin:$PATH' >> $BASH_ENV
+
+        source $BASH_ENV
+
+        echo $IMAGE
+jobs:
+  lint:
+    <<: *init
+    steps:
+      - checkout
+      - *restore_node_modules
+      - run: npm i
+      - *save_node_modules
+      - run: npm run lint
+
+  test:
+    <<: *init
+    steps:
+      - checkout
+      - *restore_node_modules
+      - run: npm i
+      - *save_node_modules
+      - run: npm test
+
+  github tags:
+    <<: *init
+    steps:
+      - checkout
+      - run: git config --global user.name "CircleCI"
+      - run: git config --global user.email "auto_deploy@circleci.com"
+      - run: git tag v`cat package.json | grep version | cut -d '"' -f4`
+      - run: git push https://$GH_TOKEN@github.com/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME.git --tags
+
+  npm publish:
+    <<: *init
+    steps:
+      - checkout
+      - *setup_npm
+      - run:
+          name: Create publish folder out/
+          command: mkdir out && cp -r bin package.json index.js README.md out/
+      - run: npm publish out
+
+workflows:
+  version: 2
+  deploy to npm:
+    jobs:
+      - github tags:
+          <<: *branch_is_deploy
+      - npm publish:
+          <<: *branch_is_deploy
+  testing:
+    jobs:
+      - test:
+          <<: *branch_not_deploy
+      - lint:
+          <<: *branch_not_deploy
